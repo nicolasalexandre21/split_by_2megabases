@@ -2,21 +2,21 @@
 //module load bedtools java
 //nextflow run -params-file params.yml split_by_2megabases.nf -c nextflow.config -dump-channels
 
-reference_ch = file( params.ref_index, checkIfExists: true )  // Make a file object to pass to the channel (implicitly converted to value channel in the `from` from the process)
+reference_ch = file( params.ref_index, checkIfExists: true )  
 
 Channel.fromPath( params.vcfs, checkIfExists: true )
     .dump(tag:"vcf_original")
     .into{ vcf_for_chromosomes;vcf_for_files }   
+
 process makeWindows {
     input:
-    path ref_index from reference_ch               // Always supply files as input parameters for correct file staging 
+    path ref_index from reference_ch                
 
     output:
     path( "windows.bed" )  into windows_bed        
     
     script:
     """
-    # bedtools makewindows -g "${params.reference}.fai" -w 2000000 > windows.bed
     bedtools makewindows -g $ref_index -w 2000000 > windows.bed    
     """
 }
@@ -67,17 +67,15 @@ process GatherVcf {
     cpus 12
 
     input:
-    tuple val(chrom), val(vcf_basename), val(vcf), val(start), val(end) 
-from vcf_with_matched_intervals_ch 
-    
-    output:
-    tuple val(vcf_basename), val("${chrom}:${start}-${end}"), 
-path("${output}.txt")  into vcf_out
+
+    output:    
 
     script:
-    output = "${vcf_basename}__${chrom}__${start}-${end}"
+    output = "${vcf_basename}"
     """
-    java -Xmx32G -jar /clusterfs/vector/home/groups/software/sl-7.x86_64/modules/picard/2.9.0/lib/picard.jar GatherVcfs I=vcf.list O=sample.vcf
+    java -Xmx32G -jar 
+/clusterfs/vector/home/groups/software/sl-7.x86_64/modules/picard/2.9.0/lib/picard.jar 
+GatherVcfs I=?? O=${vcf_basename}.vcf
     """
 }
 
@@ -85,16 +83,11 @@ process GzipVcf {
     cpus 12
 
     input:
-    tuple val(chrom), val(vcf_basename), val(vcf), val(start), val(end) 
-from vcf_with_matched_intervals_ch 
-    
     output:
-    tuple val(vcf_basename), val("${chrom}:${start}-${end}"), 
-path("${output}.txt")  into vcf_out
 
     script:
-    output = "${vcf_basename}__${chrom}__${start}-${end}"
+    output = "${vcf_basename}.vcf"
     """
-    gzip merged_imputed_subset.vcf
+    gzip ${vcf_basename}.vcf
     """
 }
