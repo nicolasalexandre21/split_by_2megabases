@@ -2,6 +2,8 @@
 //module load bedtools java
 //nextflow run -params-file params.yml split_by_2megabases.nf -c nextflow.config -dump-channels
 
+nextflow.enable.dsl=2
+
 reference_ch = file( params.ref_index, checkIfExists: true )  
 
 Channel.fromPath( params.vcfs, checkIfExists: true )
