@@ -7,16 +7,13 @@ nextflow.enable.dsl=2
 reference_ch = file( params.ref_index, checkIfExists: true )  
 
 Channel.fromPath( params.vcfs, checkIfExists: true )
-    .dump(tag:"vcf_original")
     .into{ vcf_for_chromosomes;vcf_for_files }   
 
 process makeWindows {
     input:
     path ref_index from reference_ch                
-
     output:
     path( "windows.bed" )  into windows_bed        
-    
     script:
     """
     bedtools makewindows -g $ref_index -w 2000000 > windows.bed    
@@ -30,38 +27,42 @@ windows_bed
     .set { interval_ch } // Intervals
 
 vcf_for_chromosomes.splitCsv(sep:"\t",limit:1)
-    .dump(tag:"vcf_splitcsv")
     .map { it[0]}
     .set{ vcf_chromosomes_ch}
 
 // Group the intervals with the matching VCF files, from the same chromosome
 vcf_for_files
     // Get the chromosome from each per-chromosome VCF by reading the VCF file and taking the first column (the chromosome) in the first line
-    .dump(tag:"vcf_before_map")    
     .map { tuple(it.baseName, it ) }
-    .dump(tag:"vcf_tuple")    
     .cross( vcf_chromosomes_ch)
-    .dump(tag:"vcf_tuple_chromosomes")
     .join( interval_ch, by:0, remainder:true )
-    .dump(tag:"vcf_tuple_join")    
     .set { vcf_with_matched_intervals_ch }
 
 process ImputeVcf {
     cpus 12
-
     input:
     tuple val(chrom), val(vcf_basename), val(vcf), val(start), val(end) 
 from vcf_with_matched_intervals_ch 
-    
     output:
     tuple val(vcf_basename), val("${chrom}:${start}-${end}"), 
-path("${output}.txt")  into vcf_out
-
+path("${output}")  into vcf_out
     script:
     output = "${vcf_basename}__${chrom}__${start}-${end}"
     """
     ./loimpute -i ${vcf} -ne 80000 -range ${start} ${end} -h 
-refpanel.vcf.gz -o ${output}.txt
+refpanel.vcf.gz -o ${output}
+    """
+}
+
+process ListVcf {
+    input:
+    path vcf from vcf_files_ch   // e.g. sample1.vcf.gz
+    output:
+    tuple val(prefix), path("windows.tsv") into window_ch // output here is a list [ 'sample1', file('windows.tsv') ]
+    script:
+    prefix = vcf.baseName  // Makes a Groovy variable with name of the vcf file with the file ending removed.
+    """
+    makewindows $vcf
     """
 }
 
