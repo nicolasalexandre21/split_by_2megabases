@@ -31,12 +31,19 @@ vcf_for_chromosomes.splitCsv(sep:"\t",limit:1)
     .set{ vcf_chromosomes_ch}
 
 // Group the intervals with the matching VCF files, from the same chromosome
-vcf_for_files
+vcf_chrom_files
     // Get the chromosome from each per-chromosome VCF by reading the VCF file and taking the first column (the chromosome) in the first line
     .map { tuple(it.baseName, it ) }
     .cross( vcf_chromosomes_ch)
     .join( interval_ch, by:0, remainder:true )
     .set { vcf_with_matched_intervals_ch }
+    
+    // Group the intervals with the matching VCF files, from the same sample
+vcf_sample_files
+    .map { tuple(it.baseName, it ) }
+    .cross( vcf_chromosomes_ch)
+    .join( interval_ch, by:0, remainder:true )
+    .set { vcf_with_matched_chromosomes_ch }
 
 process ImputeVcf {
     cpus 12
