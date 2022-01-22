@@ -69,12 +69,12 @@ GatherVcfs I=tmp.list O=${vcf_basename}
 
 process GzipVcf {
     cpus 12
-
     input:
+    tuple val(vcf_basename)
     output:
-
+    path("${vcf_basename}.vcf.gz") into vcf_zipped 
     script:
-    output = "${vcf_basename}.vcf"
+    output = "${vcf_basename}.vcf.gz"
     """
     gzip ${vcf_basename}.vcf
     """
