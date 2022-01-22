@@ -26,33 +26,21 @@ windows_bed
 +0 to interval +1 */
     .set { interval_ch } // Intervals
 
-vcf_for_chromosomes.splitCsv(sep:"\t",limit:1)
-    .map { it[0]}
-    .set{ vcf_chromosomes_ch}
-
 // Group the intervals with the matching VCF files, from the same chromosome
 vcf_chrom_files
     // Get the chromosome from each per-chromosome VCF by reading the VCF file and taking the first column (the chromosome) in the first line
-    .map { tuple(it.baseName, it ) }
-    .cross( vcf_chromosomes_ch)
-    .join( interval_ch, by:0, remainder:true )
+    .map { tuple(it.simpleName, it ) }
+    .cross( interval_ch)
     .set { vcf_with_matched_intervals_ch }
-    
-    // Group the intervals with the matching VCF files, from the same sample
-vcf_sample_files
-    .map { tuple(it.baseName, it ) }
-    .cross( vcf_chromosomes_ch)
-    .join( interval_ch, by:0, remainder:true )
-    .set { vcf_with_matched_chromosomes_ch }
 
 process ImputeVcf {
     cpus 12
     input:
-    tuple val(chrom), val(vcf_basename), val(vcf), val(start), val(end) 
+    tuple val(vcf_basename), val(vcf), val(chrom), val(start), val(end) 
 from vcf_with_matched_intervals_ch 
     output:
-    tuple val(vcf_basename), val("${chrom}:${start}-${end}"), 
-path("${output}")  into vcf_out
+    tuple val(vcf_basename), 
+path("${output}.vcf.gz")  into vcf_out
     script:
     output = "${vcf_basename}__${chrom}__${start}-${end}"
     """
@@ -61,31 +49,21 @@ refpanel.vcf.gz -o ${output}
     """
 }
 
-process ListVcf {
-    input:
-    path vcf from vcf_files_ch   // e.g. sample1.vcf.gz
-    output:
-    tuple val(prefix), path("windows.tsv") into window_ch // output here is a list [ 'sample1', file('windows.tsv') ]
-    script:
-    prefix = vcf.baseName  // Makes a Groovy variable with name of the vcf file with the file ending removed.
-    """
-    makewindows $vcf
-    """
-}
 
 process GatherVcf {
     cpus 12
-
     input:
-
+    tuple val(vcf_basename), val(vcfs) from vcf_out.groupTuple()
     output:    
-
+    path("${vcf_basename}.vcf") into vcf_merged 
     script:
-    output = "${vcf_basename}"
     """
+    cat << EOF > tmp.list
+    ${vcfs.join("\n")}
+    EOF
     java -Xmx32G -jar 
 /clusterfs/vector/home/groups/software/sl-7.x86_64/modules/picard/2.9.0/lib/picard.jar 
-GatherVcfs I=?? O=${vcf_basename}.vcf
+GatherVcfs I=tmp.list O=${vcf_basename}
     """
 }
 
